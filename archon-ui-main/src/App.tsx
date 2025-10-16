@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
-import { queryClient } from './features/shared/queryClient';
+import { queryClient } from './features/shared/config/queryClient';
 import { KnowledgeBasePage } from './pages/KnowledgeBasePage';
 import { SettingsPage } from './pages/SettingsPage';
 import { MCPPage } from './pages/MCPPage';
@@ -13,6 +13,7 @@ import { ToastProvider } from './features/ui/components/ToastProvider';
 import { SettingsProvider, useSettings } from './contexts/SettingsContext';
 import { TooltipProvider } from './features/ui/primitives/tooltip';
 import { ProjectPage } from './pages/ProjectPage';
+import StyleGuidePage from './pages/StyleGuidePage';
 import { DisconnectScreenOverlay } from './components/DisconnectScreenOverlay';
 import { ErrorBoundaryWithBugReport } from './components/bug-report/ErrorBoundaryWithBugReport';
 import { MigrationBanner } from './components/ui/MigrationBanner';
@@ -21,14 +22,19 @@ import { useMigrationStatus } from './hooks/useMigrationStatus';
 
 
 const AppRoutes = () => {
-  const { projectsEnabled } = useSettings();
-  
+  const { projectsEnabled, styleGuideEnabled } = useSettings();
+
   return (
     <Routes>
       <Route path="/" element={<KnowledgeBasePage />} />
       <Route path="/onboarding" element={<OnboardingPage />} />
       <Route path="/settings" element={<SettingsPage />} />
       <Route path="/mcp" element={<MCPPage />} />
+      {styleGuideEnabled ? (
+        <Route path="/style-guide" element={<StyleGuidePage />} />
+      ) : (
+        <Route path="/style-guide" element={<Navigate to="/" replace />} />
+      )}
       {projectsEnabled ? (
         <>
           <Route path="/projects" element={<ProjectPage />} />

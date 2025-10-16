@@ -39,7 +39,7 @@ server = [
     "python-multipart>=0.0.20",
     "watchfiles>=0.18",
     # Web crawling
-    "crawl4ai==0.6.2",
+    "crawl4ai==0.7.4",
     # Realtime comms
     "python-socketio[asyncio]>=5.11.0",
     # Database and storage
@@ -106,7 +106,7 @@ all = [
     "uvicorn>=0.24.0",
     "python-multipart>=0.0.20",
     "watchfiles>=0.18",
-    "crawl4ai==0.6.2",
+    "crawl4ai==0.7.4",
     "python-socketio[asyncio]>=5.11.0",
     "supabase==2.15.1",
     "asyncpg>=0.29.0",
@@ -180,4 +180,3 @@ check_untyped_defs = true
 # Third-party libraries often don't have type stubs
 # We'll explicitly type our own code but not fail on external libs
 ignore_missing_imports = true
-

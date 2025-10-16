@@ -139,6 +139,8 @@ class CodeExtractionService:
         source_id: str,
         progress_callback: Callable | None = None,
         cancellation_check: Callable[[], None] | None = None,
+        provider: str | None = None,
+        embedding_provider: str | None = None,
     ) -> int:
         """
         Extract code examples from crawled documents and store them.
@@ -149,6 +151,8 @@ class CodeExtractionService:
             source_id: The unique source_id for all documents
             progress_callback: Optional async callback for progress updates
             cancellation_check: Optional function to check for cancellation
+            provider: Optional LLM provider identifier for summary generation
+            embedding_provider: Optional embedding provider override for vector creation
 
         Returns:
             Number of code examples stored
@@ -157,9 +161,16 @@ class CodeExtractionService:
         extraction_callback = None
         if progress_callback:
             async def extraction_progress(data: dict):
-                # Scale progress to 0-20% range
-                raw_progress = data.get("progress", 0)
-                scaled_progress = int(raw_progress * 0.2)  # 0-20%
+                # Scale progress to 0-20% range with normalization similar to later phases
+                raw = data.get("progress", data.get("percentage", 0))
+                try:
+                    raw_num = float(raw)
+                except (TypeError, ValueError):
+                    raw_num = 0.0
+                if 0.0 <= raw_num <= 1.0:
+                    raw_num *= 100.0
+                # 0-20% with clamping
+                scaled_progress = min(20, max(0, int(raw_num * 0.2)))
                 data["progress"] = scaled_progress
                 await progress_callback(data)
             extraction_callback = extraction_progress
@@ -196,15 +207,22 @@ class CodeExtractionService:
         if progress_callback:
             async def summary_progress(data: dict):
                 # Scale progress to 20-90% range
-                raw_progress = data.get("progress", 0)
-                scaled_progress = 20 + int(raw_progress * 0.7)  # 20-90%
+                raw = data.get("progress", data.get("percentage", 0))
+                try:
+                    raw_num = float(raw)
+                except (TypeError, ValueError):
+                    raw_num = 0.0
+                if 0.0 <= raw_num <= 1.0:
+                    raw_num *= 100.0
+                # 20-90% with clamping
+                scaled_progress = min(90, max(20, 20 + int(raw_num * 0.7)))
                 data["progress"] = scaled_progress
                 await progress_callback(data)
             summary_callback = summary_progress
 
         # Generate summaries for code blocks
         summary_results = await self._generate_code_summaries(
-            all_code_blocks, summary_callback, cancellation_check
+            all_code_blocks, summary_callback, cancellation_check, provider
         )
 
         # Prepare code examples for storage
@@ -215,15 +233,26 @@ class CodeExtractionService:
         if progress_callback:
             async def storage_progress(data: dict):
                 # Scale progress to 90-100% range
-                raw_progress = data.get("progress", 0)
-                scaled_progress = 90 + int(raw_progress * 0.1)  # 90-100%
+                raw = data.get("progress", data.get("percentage", 0))
+                try:
+                    raw_num = float(raw)
+                except (TypeError, ValueError):
+                    raw_num = 0.0
+                if 0.0 <= raw_num <= 1.0:
+                    raw_num *= 100.0
+                # 90-100% with clamping
+                scaled_progress = min(100, max(90, 90 + int(raw_num * 0.1)))
                 data["progress"] = scaled_progress
                 await progress_callback(data)
             storage_callback = storage_progress
 
         # Store code examples in database
         return await self._store_code_examples(
-            storage_data, url_to_full_document, storage_callback
+            storage_data,
+            url_to_full_document,
+            storage_callback,
+            provider,
+            embedding_provider,
         )
 
     async def _extract_code_blocks_from_documents(
@@ -879,9 +908,20 @@ class CodeExtractionService:
                         current_indent = indent
                         block_start_idx = i
                     current_block.append(line)
-                elif current_block and len("\n".join(current_block)) >= min_length:
+                elif current_block:
+                    block_text = "\n".join(current_block)
+                    threshold = (
+                        min_length
+                        if min_length is not None
+                        else await self._get_min_code_length()
+                    )
+                    if len(block_text) < threshold:
+                        current_block = []
+                        current_indent = None
+                        continue
+
                     # End of indented block, check if it's code
-                    code_content = "\n".join(current_block)
+                    code_content = block_text
 
                     # Try to detect language from content
                     language = self._detect_language_from_content(code_content)
@@ -1523,6 +1563,7 @@ class CodeExtractionService:
         all_code_blocks: list[dict[str, Any]],
         progress_callback: Callable | None = None,
         cancellation_check: Callable[[], None] | None = None,
+        provider: str | None = None,
     ) -> list[dict[str, str]]:
         """
         Generate summaries for all code blocks.
@@ -1587,7 +1628,7 @@ class CodeExtractionService:
 
         try:
             results = await generate_code_summaries_batch(
-                code_blocks_for_summaries, max_workers, progress_callback=summary_progress_callback
+                code_blocks_for_summaries, max_workers, progress_callback=summary_progress_callback, provider=provider
             )
 
             # Ensure all results are valid dicts
@@ -1667,12 +1708,21 @@ class CodeExtractionService:
         storage_data: dict[str, list[Any]],
         url_to_full_document: dict[str, str],
         progress_callback: Callable | None = None,
+        provider: str | None = None,
+        embedding_provider: str | None = None,
     ) -> int:
         """
         Store code examples in the database.
 
         Returns:
             Number of code examples stored
+
+        Args:
+            storage_data: Prepared code example payloads
+            url_to_full_document: Mapping of URLs to their full document content
+            progress_callback: Optional callback for progress updates
+            provider: Optional LLM provider identifier for summaries
+            embedding_provider: Optional embedding provider override for vector storage
         """
         # Create progress callback for storage phase
         storage_progress_callback = None
@@ -1709,7 +1759,8 @@ class CodeExtractionService:
                 batch_size=20,
                 url_to_full_document=url_to_full_document,
                 progress_callback=storage_progress_callback,
-                provider=None,  # Use configured provider
+                provider=provider,
+                embedding_provider=embedding_provider,
             )
 
             # Report completion of code extraction/storage phase

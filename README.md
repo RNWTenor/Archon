@@ -3,6 +3,10 @@
 </p>
 
 <p align="center">
+   <a href="https://trendshift.io/repositories/13964" target="_blank"><img src="https://trendshift.io/api/badge/repositories/13964" alt="coleam00%2FArchon | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
+</p>
+
+<p align="center">
   <em>Power up your AI coding assistants with your own custom knowledge base and task management as an MCP server</em>
 </p>
 
@@ -41,6 +45,16 @@ This new vision for Archon replaces the old one (the agenteer). Archon used to b
 - **[Dynamous AI Mastery](https://dynamous.ai)** - The birthplace of Archon - come join a vibrant community of other early AI adopters all helping each other transform their careers and businesses!
 
 ## Quick Start
+
+<p align="center">
+  <a href="https://youtu.be/DMXyDpnzNpY">
+    <img src="https://img.youtube.com/vi/DMXyDpnzNpY/maxresdefault.jpg" alt="Archon Setup Tutorial" width="640" />
+  </a>
+  <br/>
+  <em>📺 Click to watch the setup tutorial on YouTube</em>
+  <br/>
+  <a href="./archon-example-workflow">-> Example AI coding workflow in the video <-</a>
+</p>
 
 ### Prerequisites
 
@@ -206,14 +220,18 @@ To upgrade Archon to the latest version:
    git pull
    ```
 
-2. **Check for migrations**: Look in the `migration/` folder for any SQL files newer than your last update. Check the file created dates to determine if you need to run them. You can run these in the SQL editor just like you did when you first set up Archon. We are also working on a way to make handling these migrations automatic!
-
-3. **Rebuild and restart**:
+2. **Rebuild and restart containers**:
    ```bash
    docker compose up -d --build
    ```
+   This rebuilds containers with the latest code and restarts all services.
 
-This is the same command used for initial setup - it rebuilds containers with the latest code and restarts services.
+3. **Check for database migrations**:
+   - Open the Archon settings in your browser: [http://localhost:3737/settings](http://localhost:3737/settings)
+   - Navigate to the **Database Migrations** section
+   - If there are pending migrations, the UI will display them with clear instructions
+   - Click on each migration to view and copy the SQL
+   - Run the SQL scripts in your Supabase SQL editor in the order shown
 
 ## What's Included
 
