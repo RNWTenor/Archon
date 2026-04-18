@@ -60,9 +60,9 @@ Today:                                    End-state:
 
 ### In Scope
 - Clone `RNWTenor/Archon@feat/archon-v3-deployment` to `/opt/stacks/archon2/` on MS-S1 (Dockge manages the stack after).
-- Configure `.env` from `.env.example` with minimum required vars (see APTDL → Data below).
+- Configure `.env` from `.env.example` with minimum required vars (see APTDL → Data below). Includes `PORT=3001` override — V3's default `3000` is already bound by V1's `archon-supabase-rest` (PostgREST) on MS-S1.
 - Bring up V3 with `docker compose --profile with-db up -d` (local Postgres, no Caddy, no in-stack auth).
-- Add edge Traefik dynamic config entry for `archon2.internal.cianras.com` → `http://10.0.10.15:3000`.
+- Add edge Traefik dynamic config entry for `archon2.internal.cianras.com` → `http://10.0.10.15:3001`.
 - Add dnsmasq record on hunsn-infra-01 for `archon2.internal.cianras.com` → VIP `10.0.10.40`.
 - Register V3 in MetaMCP as a distinct server (name: TBD — `Archon2` or `ArchonV3`).
 - Validate: V3 UI reachable, workflow can run, GitHub integration works on one narrow repo (`lab_infrastructure`).
@@ -104,7 +104,7 @@ Today:                                    End-state:
 
 ### Non-Functional
 1. **NFR-1:** V3 standup must not affect V1 Archon container health or MetaMCP availability.
-2. **NFR-2:** Port allocation on MS-S1 for V3 must not collide with any existing listener (port 3000 not currently in use; verify at deploy time).
+2. **NFR-2:** Port allocation on MS-S1 for V3 must not collide with any existing listener. **Verified 2026-04-18:** V3 default `3000` is already bound by V1's `archon-supabase-rest` — V3 relocated to `3001` via `PORT=3001` in `.env`.
 3. **NFR-3:** Secrets (CLAUDE token, GitHub token) never committed to git; read from `/opt/stacks/archon2/.env` which is chmod 600, owned by `fedora`.
 4. **NFR-4:** V3 container healthchecks must go green within 60 seconds of startup.
 5. **NFR-5:** Rollback from fully-deployed V3 to V3-not-present must complete in under 5 minutes without touching V1.
@@ -134,7 +134,7 @@ V3's upstream default is **zero-config SQLite** for solo use. For our deployment
 6. Set compose project name by creating `/opt/stacks/archon2/.env` entry `COMPOSE_PROJECT_NAME=archon2` (or use `-p archon2` on all commands).
 7. `docker compose --profile with-db up -d` — app + postgres, no caddy.
 8. Verify containers healthy: `docker compose ps`, `docker logs archon2-app`.
-9. Smoke-test locally: `curl -sf http://10.0.10.15:3000/` returns UI.
+9. Smoke-test locally: `curl -sf http://10.0.10.15:3001/` returns UI.
 10. Add edge Traefik route in `lab_infrastructure` repo (`edge/traefik-shared/dynamic/services.yml`) + deploy to both edge hosts.
 11. Add dnsmasq record in `lab_infrastructure` repo (`edge/hunsn/traefik/dnsmasq/cianras.conf`) + deploy to hunsn-infra-01; restart dnsmasq.
 12. Verify: `curl -sf https://archon2.internal.cianras.com/` returns UI from any lab host.
@@ -172,11 +172,11 @@ V3's upstream default is **zero-config SQLite** for solo use. For our deployment
 - **Source repo**: `https://github.com/RNWTenor/Archon` branch `feat/archon-v3-deployment` → PRD at `docs/prd/PRD-2026-04-17-archon-v3-deployment.md`.
 - **Deploy host**: MS-S1 (10.0.10.15), Fedora 43 **AMD64** (Strix Halo / Ryzen AI Max), `/opt/stacks/archon2/`.
 - **Compose project name**: `archon2` (isolates containers, network `archon2_archon-network`, volumes `archon2_*` from V1's `archon_*`).
-- **Container host ports on MS-S1**: `3000` (V3 app, internal-only bind OK), `127.0.0.1:5432` (postgres — loopback only, no LAN exposure).
+- **Container host ports on MS-S1**: `3001` (V3 app — default `3000` collides with V1 `archon-supabase-rest`), `127.0.0.1:5432` (postgres — loopback only, no LAN exposure). Postgres loopback binding may itself collide with other postgres users on MS-S1; if so, shift to `5433` at deploy time.
 - **Network zones**: Infrastructure VLAN (10, 20, 25, 40, 100) accessible via edge Traefik; external access intentionally not configured.
 - **DNS**:
   - `archon2.internal.cianras.com` → VIP `10.0.10.40` (via dnsmasq on hunsn-infra-01).
-  - Edge Traefik proxies to `10.0.10.15:3000`.
+  - Edge Traefik proxies to `10.0.10.15:3001`.
 - **Secret storage location**: OpenBao on TrueNAS `100.77.247.90:8200` under `kv-v2/cianras/github/` and `kv-v2/cianras/claude/`.
 - **Log location**: MS-S1 `docker logs archon2-app`, `docker logs archon2-postgres`. No external log shipping initially.
 
@@ -186,7 +186,7 @@ V3's upstream default is **zero-config SQLite** for solo use. For our deployment
 2. Create OpenBao entries for GitHub PAT + Claude token + webhook secret.
 3. Clone fork on MS-S1, create .env from secrets.
 4. `docker compose --profile with-db up -d`.
-5. Verify local smoke test (curl port 3000).
+5. Verify local smoke test (curl port 3001).
 6. Add edge Traefik route + dnsmasq entry in `lab_infrastructure` repo, deploy.
 7. Verify `https://archon2.internal.cianras.com/` from lab host.
 8. Register in MetaMCP as `Archon2`.
@@ -238,7 +238,7 @@ cd /opt/stacks/archon2 && docker compose --profile with-db down
 5. V1 Archon unaffected: `curl -sf http://10.0.10.15:8051/health` still returns 200 (MCP healthcheck).
 6. MetaMCP has both `Archon` (V1) and `Archon2` (V3) server entries; both report connected.
 7. A minimal V3 workflow runs end-to-end against `RNWTenor/lab_infrastructure` (planning node only) and produces a git worktree at `~/.archon/worktrees/` on the container host — no exceptions in logs.
-8. No ports conflict: `ss -tlnp` on MS-S1 shows port 3000 bound to `archon2-app` only, 8181/8051/8052/3737 still bound to V1's containers.
+8. No ports conflict: `ss -tlnp` on MS-S1 shows port 3001 bound to `archon2-app` only, 3000 still bound to V1's `archon-supabase-rest`, 8181/8051/8052/3737 still bound to V1's other containers.
 9. Secrets not committed: `git diff origin/main --name-only | xargs grep -l 'TOKEN=.\{20,\}'` returns nothing.
 10. PRD file committed on `feat/archon-v3-deployment` branch; PR opened against `main`; passes CI (if present).
 
